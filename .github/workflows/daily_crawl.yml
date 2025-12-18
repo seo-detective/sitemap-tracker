@@ -3,7 +3,7 @@ name: Daily NYT Scraper
 on:
   schedule:
     # Runs at 12:00 UTC every day (approx 7:00 AM EST)
-    - cron: '0 12 * * *'
+    - cron: '1 5 * * *'
   # Allows you to run it manually from the Actions tab for testing
   workflow_dispatch:
 
