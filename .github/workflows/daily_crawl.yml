@@ -1,0 +1,39 @@
+name: Daily NYT Scraper
+
+on:
+  schedule:
+    # Runs at 12:00 UTC every day (approx 7:00 AM EST)
+    - cron: '0 12 * * *'
+  # Allows you to run it manually from the Actions tab for testing
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout content
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run scraper script
+        run: python scraper.py
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name 'GitHub Action'
+          git config --global user.email 'action@github.com'
+          git add data/nyt_master_data.csv
+          # Only commit if there are changes (prevents errors if no new articles)
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-update NYT data" && git push)
