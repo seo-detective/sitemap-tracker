@@ -12,7 +12,8 @@ SITEMAPS = {
     "wsj": "https://www.wsj.com/wsjsitemaps/wsj_google_news.xml",
     "forbes": "https://www.forbes.com/news_sitemap.xml",  # UPDATED URL
     "bloomberg": "https://www.bloomberg.com/sitemaps/news/latest.xml"
-    "https://www.washingtonpost.com/sitemaps/news-sitemap.xml.gz"
+    "wapo": "https://www.washingtonpost.com/sitemaps/news-sitemap.xml.gz"
+    "insider": "https://www.businessinsider.com/sitemap/google-news.xml"
 }
 
 HISTORY_FILE = "data/recent_history.csv" 
