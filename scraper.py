@@ -11,7 +11,7 @@ SITEMAPS = {
     "nytimes": "https://www.nytimes.com/sitemaps/new/news.xml.gz",
     "wsj": "https://www.wsj.com/wsjsitemaps/wsj_google_news.xml",
     "forbes": "https://www.forbes.com/news_sitemap.xml",  # UPDATED URL
-    "bloomberg": "https://www.bloomberg.com/sitemaps/news/latest.xml"
+    "bloomberg": "https://www.bloomberg.com/sitemaps/news/latest.xml",
     "wapo": "https://www.washingtonpost.com/sitemaps/news-sitemap.xml.gz",
     "insider": "https://www.businessinsider.com/sitemap/google-news.xml",
 }
