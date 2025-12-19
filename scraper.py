@@ -1,7 +1,9 @@
-import advertools as adv
 import pandas as pd
 import os
-import requests  # NEW IMPORT
+import requests
+import gzip
+import io
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
@@ -15,10 +17,9 @@ SITEMAPS = {
 HISTORY_FILE = "data/recent_history.csv" 
 DAILY_FOLDER = "data/daily"
 
-# TRICK: Identify as Googlebot. 
-# Many news sites allow this even if they block generic scripts.
+# Switched back to Standard Chrome to avoid "Fake Googlebot" blocks
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/xml, text/xml, */*",
     "Accept-Encoding": "gzip, deflate, br"
 }
@@ -40,12 +41,8 @@ def parse_sitemap(content, site_name):
         # Parse XML
         root = ET.fromstring(content)
         
-        # XML Namespaces are annoying. This usually works to find all 'url' tags
-        # regardless of the namespace (e.g. <url>, <n:url>, etc.)
-        # We iterate over all children and look for local names.
-        
+        # Iterate over all children to find <url> tags
         for child in root:
-            # We are looking for <url> blocks
             if 'url' in child.tag.lower():
                 url_data = {'url': None, 'date': None, 'publication': site_name}
                 
@@ -57,7 +54,6 @@ def parse_sitemap(content, site_name):
                         url_data['url'] = sub.text.strip()
                     
                     # 2. Extract Date (lastmod OR news:publication_date)
-                    # We check for any tag that contains 'date' or 'lastmod'
                     if 'lastmod' in tag_name:
                         url_data['date'] = sub.text.strip()
                     elif 'publication_date' in tag_name:
@@ -86,9 +82,10 @@ for site_name, sitemap_url in SITEMAPS.items():
         # Handle GZIP (NYTimes uses .gz)
         if sitemap_url.endswith(".gz"):
             try:
+                # Gzip decompression
                 content = gzip.decompress(response.content)
             except OSError:
-                print(f"-> Error: {site_name} returned non-gzip data despite .gz extension.")
+                print(f"-> Warning: {site_name} not actually gzipped. Reading as plain text.")
                 content = response.content
         else:
             content = response.content
@@ -100,11 +97,7 @@ for site_name, sitemap_url in SITEMAPS.items():
             df = pd.DataFrame(extracted_data)
             
             # Normalize Date
-            # 'coerce' turns bad dates into NaT so script doesn't crash
             df['date'] = pd.to_datetime(df['date'], format='mixed', utc=True, errors='coerce')
-            
-            # Fallback: if date is missing, use "now" (or drop them if you prefer)
-            # df['date'] = df['date'].fillna(pd.Timestamp.now(tz='UTC'))
             
             # Remove rows with no URL
             df = df.dropna(subset=['url'])
@@ -128,4 +121,9 @@ if all_new_data:
         history_df['date'] = pd.to_datetime(history_df['date'], format='mixed', utc=True, errors='coerce')
         final_df = pd.concat([history_df, new_combined_df])
     else:
-        final_
+        final_df = new_combined_df
+
+    # Deduplicate
+    final_df = final_df.drop_duplicates(subset=['url'], keep='last')
+    final_df = final_df.dropna(subset=['date']) 
+    final_df = final_df.sort_values(by=['date',
