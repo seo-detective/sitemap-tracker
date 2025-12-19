@@ -17,7 +17,7 @@ SITEMAPS = {
 HISTORY_FILE = "data/recent_history.csv" 
 DAILY_FOLDER = "data/daily"
 
-# Switched back to Standard Chrome to avoid "Fake Googlebot" blocks
+# Use standard Chrome headers to look like a real browser
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "Accept": "application/xml, text/xml, */*",
@@ -42,6 +42,7 @@ def parse_sitemap(content, site_name):
         root = ET.fromstring(content)
         
         # Iterate over all children to find <url> tags
+        # We look for any tag containing 'url' to handle namespaces
         for child in root:
             if 'url' in child.tag.lower():
                 url_data = {'url': None, 'date': None, 'publication': site_name}
@@ -126,4 +127,27 @@ if all_new_data:
     # Deduplicate
     final_df = final_df.drop_duplicates(subset=['url'], keep='last')
     final_df = final_df.dropna(subset=['date']) 
-    final_df = final_df.sort_values(by=['date',
+    final_df = final_df.sort_values(by=['date', 'publication'], ascending=[False, True])
+
+    # 3. SAVE DAILY FILES
+    dates_to_update = final_df['date'].dt.date.unique()
+    
+    print(f"Updating daily files...")
+    for date_obj in dates_to_update:
+        date_str = str(date_obj)
+        daily_filename = f"{DAILY_FOLDER}/{date_str}.csv"
+        
+        daily_slice = final_df[final_df['date'].dt.date == date_obj]
+        daily_slice.to_csv(daily_filename, index=False)
+        print(f"-> Saved {daily_filename} ({len(daily_slice)} articles)")
+
+    # 4. PRUNE HISTORY
+    cutoff_date = pd.Timestamp.now(tz='UTC') - timedelta(days=30)
+    recent_history = final_df[final_df['date'] > cutoff_date]
+    recent_history.to_csv(HISTORY_FILE, index=False)
+    print(f"History file pruned. Keeping {len(recent_history)} rows.")
+
+else:
+    print("No data found.")
+
+# --- END OF SCRIPT ---
