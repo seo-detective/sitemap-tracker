@@ -84,11 +84,15 @@ def parse_sitemap(content, site_name):
 for site_name, sitemap_url in SITEMAPS.items():
     print(f"Fetching {site_name}...")
     
-    # CHOOSE IDENTITY
-    current_headers = HEADERS_GOOGLEBOT if site_name == 'wsj' else HEADERS_CHROME
+    # UPDATE: Use Googlebot for WSJ AND WaPo to avoid blocks/timeouts
+    if site_name in ['wsj', 'wapo']:
+        current_headers = HEADERS_GOOGLEBOT
+    else:
+        current_headers = HEADERS_CHROME
     
     try:
-        response = requests.get(sitemap_url, headers=current_headers, timeout=20)
+        # UPDATE: Increased timeout to 60 seconds
+        response = requests.get(sitemap_url, headers=current_headers, timeout=60)
         
         if response.status_code != 200:
             print(f"-> Failed to download {site_name}: HTTP {response.status_code}")
@@ -97,7 +101,6 @@ for site_name, sitemap_url in SITEMAPS.items():
         # Intelligent GZIP handling
         content = response.content
         
-        # Check for gzip magic number (1f 8b)
         if content.startswith(b'\x1f\x8b'):
             try:
                 content = gzip.decompress(content)
