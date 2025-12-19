@@ -1,19 +1,17 @@
 import advertools as adv
 import pandas as pd
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # --- CONFIGURATION ---
-# Format: "Name": "Sitemap URL"
 SITEMAPS = {
     "nytimes": "https://www.nytimes.com/sitemaps/new/news.xml.gz",
-    "wsj": "https://www.wsj.com/wsjsitemaps/wsj_google_news.xml",
-    "wapo": "https://www.washingtonpost.com/sitemaps/news-sitemap.xml.gz",
-    "forbes": "https://www.forbes.com/news_sitemap.xml",
-    "bloomberg": "https://www.bloomberg.com/sitemaps/news/latest.xml",
+    "wsj": "https://www.wsj.com/sitemaps/news.xml", # Assuming you have WSJ
+    "forbes": "https://www.forbes.com/sitemaps/sitemap.xml",
+    "bloomberg": "https://www.bloomberg.com/feeds/sitemap_news.xml"
 }
 
-MASTER_FILE = "data/master_data.csv"
+HISTORY_FILE = "data/recent_history.csv" 
 DAILY_FOLDER = "data/daily"
 # ---------------------
 
@@ -28,69 +26,71 @@ all_new_data = []
 for site_name, sitemap_url in SITEMAPS.items():
     print(f"Fetching {site_name}...")
     try:
-        # Crawl
         df = adv.sitemap_to_df(sitemap_url, recursive=True)
         
         if 'lastmod' in df.columns:
-            # Clean and Select
             site_data = df[['loc', 'lastmod']].copy()
-            site_data['lastmod'] = pd.to_datetime(site_data['lastmod'])
-            site_data.columns = ['url', 'date']
             
-            # ADD THE NEW COLUMN: PUBLICATION NAME
+            # FIX #1: Handle incoming dates flexibly
+            site_data['lastmod'] = pd.to_datetime(site_data['lastmod'], format='mixed')
+            
+            site_data.columns = ['url', 'date']
             site_data['publication'] = site_name
             
-            # Add to our list
             all_new_data.append(site_data)
             print(f"-> Found {len(site_data)} URLs for {site_name}")
         else:
-            print(f"-> Error: {site_name} sitemap has no dates.")
+            print(f"-> Error: {site_name} has no dates.")
             
     except Exception as e:
         print(f"-> Failed to crawl {site_name}: {e}")
 
-# 2. COMBINE ALL NEW DATA
+# 2. PROCESS DATA
 if all_new_data:
     new_combined_df = pd.concat(all_new_data)
     
-    # 3. UPDATE MASTER DATABASE
-    if os.path.exists(MASTER_FILE):
+    # Load History (if exists)
+    if os.path.exists(HISTORY_FILE):
         print("Loading existing database...")
-        master_df = pd.read_csv(MASTER_FILE)
-        master_df['date'] = pd.to_datetime(master_df['date'])
+        history_df = pd.read_csv(HISTORY_FILE)
         
-        # Merge old and new
-        final_df = pd.concat([master_df, new_combined_df])
+        # FIX #2: Handle existing history dates flexibly (The crash happened here)
+        history_df['date'] = pd.to_datetime(history_df['date'], format='mixed')
+        
+        final_df = pd.concat([history_df, new_combined_df])
     else:
-        print("Creating new database...")
         final_df = new_combined_df
 
-    # Deduplicate (Keep latest)
+    # Deduplicate (Keep latest version)
     final_df = final_df.drop_duplicates(subset=['url'], keep='last')
-    
-    # Sort: First by Date (newest), then by Publication
     final_df = final_df.sort_values(by=['date', 'publication'], ascending=[False, True])
-    
-    # Save Master
-    final_df.to_csv(MASTER_FILE, index=False)
-    print(f"Master Database updated: {len(final_df)} total articles.")
 
-    # 4. CREATE DAILY PARTITIONS
-    # We loop through dates in the NEW data to update daily files
+    # 3. SAVE DAILY FILES
     dates_to_update = new_combined_df['date'].dt.date.unique()
     
-    print(f"Organizing data into daily files...")
+    print(f"Updating daily files...")
     for date_obj in dates_to_update:
         date_str = str(date_obj)
+        daily_filename = f"{DAILY_FOLDER}/{date_str}.csv"
         
-        # Filter master for this day
+        # Get data for this specific day
         daily_slice = final_df[final_df['date'].dt.date == date_obj]
         
-        # Save
-        daily_filename = f"{DAILY_FOLDER}/{date_str}.csv"
+        # Save it
         daily_slice.to_csv(daily_filename, index=False)
-        
-    print("Daily files organized successfully.")
+        print(f"-> Saved {daily_filename} ({len(daily_slice)} articles)")
+
+    # 4. PRUNE HISTORY
+    cutoff_date = datetime.now() - timedelta(days=30)
+    
+    # Ensure cutoff_date is timezone-aware if your data is
+    if final_df['date'].dt.tz is not None:
+         cutoff_date = pd.Timestamp.now(tz='UTC') - timedelta(days=30)
+
+    recent_history = final_df[final_df['date'] > cutoff_date]
+    
+    recent_history.to_csv(HISTORY_FILE, index=False)
+    print(f"History file pruned. Keeping {len(recent_history)} rows.")
 
 else:
-    print("No data found from any sitemaps.")
+    print("No data found.")
