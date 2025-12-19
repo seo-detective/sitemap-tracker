@@ -7,9 +7,9 @@ from datetime import datetime, timedelta
 # --- CONFIGURATION ---
 SITEMAPS = {
     "nytimes": "https://www.nytimes.com/sitemaps/new/news.xml.gz",
-    "wsj": "https://www.wsj.com/sitemaps/news.xml",
+    "wsj": "https://www.wsj.com/wsjsitemaps/wsj_google_news.xml",
     "forbes": "https://www.forbes.com/news_sitemap.xml",  # UPDATED URL
-    "bloomberg": "https://www.bloomberg.com/feeds/sitemap_news.xml"
+    "bloomberg": "https://www.bloomberg.com/sitemaps/news/latest.xml"
 }
 
 HISTORY_FILE = "data/recent_history.csv" 
