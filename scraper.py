@@ -14,7 +14,6 @@ SITEMAPS = {
     "wsj": "https://www.wsj.com/wsjsitemaps/wsj_google_news.xml",
     "forbes": "https://www.forbes.com/news_sitemap.xml",  # UPDATED URL
     "bloomberg": "https://www.bloomberg.com/sitemaps/news/latest.xml",
-    "wapo": "https://www.washingtonpost.com/sitemaps/news-sitemap.xml.gz",
     "insider": "https://www.businessinsider.com/sitemap/google-news.xml",
 }
 
@@ -38,6 +37,8 @@ HEADERS_GOOGLEBOT = {
 print(f"[{datetime.now()}] Starting Job...")
 os.makedirs(DAILY_FOLDER, exist_ok=True)
 
+all_new_data = [] 
+
 # --- SETUP RETRY SESSION ---
 session = requests.Session()
 retries = Retry(total=3, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
@@ -59,12 +60,11 @@ def parse_sitemap(content, site_name):
                     elif 'lastmod' in tag_name or 'publication_date' in tag_name:
                         url_data['date'] = tag.text.strip()
 
-                # 1. Check direct children (Standard sitemaps)
+                # 1. Check direct children
                 for sub in child:
                     check_tag(sub)
                     
-                    # 2. Check nested children (Google News sitemaps like Insider)
-                    # If the tag is <news:news>, the date is inside IT.
+                    # 2. Check nested children (Fix for Insider)
                     if 'news' in sub.tag.lower():
                         for subsub in sub:
                             check_tag(subsub)
@@ -80,14 +80,15 @@ def parse_sitemap(content, site_name):
 for site_name, sitemap_url in SITEMAPS.items():
     print(f"Fetching {site_name}...")
     
-    # Use Googlebot for tricky sites
-    if site_name in ['wsj', 'wapo']:
+    # Use Googlebot for WSJ, Chrome for others
+    if site_name == 'wsj':
         session.headers.update(HEADERS_GOOGLEBOT)
     else:
         session.headers.update(HEADERS_CHROME)
     
     try:
-        response = session.get(sitemap_url, timeout=90)
+        # Standard timeout
+        response = session.get(sitemap_url, timeout=30)
         
         if response.status_code != 200:
             print(f"-> Failed to download {site_name}: HTTP {response.status_code}")
@@ -108,15 +109,8 @@ for site_name, sitemap_url in SITEMAPS.items():
             # Normalize Date
             df['date'] = pd.to_datetime(df['date'], format='mixed', utc=True, errors='coerce')
             
-            # Remove rows with no URL OR no Date
+            # Clean Data
             df = df.dropna(subset=['url'])
-            
-            # --- DEBUG CHECK ---
-            # If dates failed to parse, they are NaT. We want to know if that happens.
-            missing_dates = df['date'].isna().sum()
-            if missing_dates > 0:
-                print(f"   (Warning: Dropped {missing_dates} rows due to missing/bad dates)")
-            
             df = df.dropna(subset=['date'])
 
             all_new_data.append(df)
