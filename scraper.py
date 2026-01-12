@@ -128,6 +128,7 @@ if all_new_data:
     if os.path.exists(HISTORY_FILE):
         print("Loading existing database...")
         history_df = pd.read_csv(HISTORY_FILE)
+        # Keep history loading in UTC to match new data
         history_df['date'] = pd.to_datetime(history_df['date'], format='mixed', utc=True, errors='coerce')
         final_df = pd.concat([history_df, new_combined_df])
     else:
@@ -137,18 +138,36 @@ if all_new_data:
     final_df = final_df.dropna(subset=['date']) 
     final_df = final_df.sort_values(by=['date', 'publication'], ascending=[False, True])
 
-    dates_to_update = final_df['date'].dt.date.unique()
+    # --- FIX START: Create a Local Time column for file grouping ---
+    # Convert UTC to US/Eastern (covers both EST and EDT automatically)
+    final_df['local_date'] = final_df['date'].dt.tz_convert('US/Eastern')
+    
+    # Get unique dates based on LOCAL time, not UTC
+    dates_to_update = final_df['local_date'].dt.date.unique()
+    # --- FIX END ---
     
     print(f"Updating daily files...")
     for date_obj in dates_to_update:
         date_str = str(date_obj)
         daily_filename = f"{DAILY_FOLDER}/{date_str}.csv"
-        daily_slice = final_df[final_df['date'].dt.date == date_obj]
+        
+        # Filter using the local_date column we created
+        daily_slice = final_df[final_df['local_date'].dt.date == date_obj].copy()
+        
+        # Optional: Save the CSV with local times visible instead of UTC
+        # daily_slice['date'] = daily_slice['local_date'] 
+        # daily_slice = daily_slice.drop(columns=['local_date'])
+        
         daily_slice.to_csv(daily_filename, index=False)
         print(f"-> Saved {daily_filename} ({len(daily_slice)} articles)")
 
     cutoff_date = pd.Timestamp.now(tz='UTC') - timedelta(days=30)
     recent_history = final_df[final_df['date'] > cutoff_date]
+    
+    # Drop the helper column before saving history to keep it clean
+    if 'local_date' in recent_history.columns:
+        recent_history = recent_history.drop(columns=['local_date'])
+        
     recent_history.to_csv(HISTORY_FILE, index=False)
     print(f"History file pruned. Keeping {len(recent_history)} rows.")
 else:
